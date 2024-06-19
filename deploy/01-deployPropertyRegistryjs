@@ -1,0 +1,26 @@
+const { developmentChains } = require("../helper-hardhat-config");
+const { verify } = require("../utils/verify");
+const { ethers } = require("hardhat");
+module.exports = async ({ deployments, network }) => {
+  console.log("Deploying PropertyRegistry...");
+  const { deploy, log } = deployments;
+  const accounts = await ethers.getSigners();
+  const deployer = accounts[0];
+
+  const argss = [deployer.address];
+
+  const PropertyRegistry = await deploy("PropertyRegistry", {
+    from: deployer.address,
+    args: argss,
+    log: true,
+    waitConfirmations: network.config.blockConfirmations || 1,
+  });
+  console.log("PropertyRegistry Deployed!");
+
+  if (!developmentChains.includes(network.name)) {
+    await verify(PropertyRegistry.address, argss);
+  }
+
+  log("----------------------------------------");
+};
+module.exports.tags = ["all", "propertyregistry"];
