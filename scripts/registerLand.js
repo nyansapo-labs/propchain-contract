@@ -6,7 +6,7 @@ async function main() {
   const user = accounts[1];
   const propertyRegistry = await ethers.getContractAt(
     "PropertyRegistry",
-    "0x47D6700AB06CC3efEE5320278DE397A8D37A3929",
+    "0xEbF68D0316F5Ca8dbeD956e4f1bF709490E53166",
     user
   );
 

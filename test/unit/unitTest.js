@@ -3,6 +3,7 @@ const { assert, expect } = require("chai");
 const { developmentChains } = require("../../helper-hardhat-config");
 const { moveTime } = require("../../utils/moveTime");
 const { moveBlocks } = require("../../utils/moveBlocks");
+
 !developmentChains.includes(network.name)
   ? describe.skip
   : describe("PropertyRegistry and Auction Unit Tests", function () {
@@ -10,11 +11,14 @@ const { moveBlocks } = require("../../utils/moveBlocks");
       const location = "Test Location";
       const gpsAddress = "1234";
       const ipfsHash = "QmHash";
-      const startingPrice = ethers.parseEther("1");
-      const auctionEndTime = 3600; // 1 hour from now
-      const newPrice = ethers.parseEther("2");
-      const bidAmount = ethers.parseEther("1.5");
+      const startingPrice = ethers.parseEther("0.001");
+      const auctionEndTime = 30; // 1 hour from now
+      const newPrice = ethers.parseEther("0.002");
+      const bidAmount = ethers.parseEther("0.005");
       const nonExistingGPS = "5678";
+      const listingFee = (1 / 100) * Number(startingPrice);
+
+      const transactionFee = (1 / 100) * Number(bidAmount);
 
       beforeEach(async () => {
         const accounts = await ethers.getSigners();
@@ -27,7 +31,7 @@ const { moveBlocks } = require("../../utils/moveBlocks");
         await deployments.fixture(["all"]);
         propertyRegistry = await ethers.getContractAt(
           "PropertyRegistry",
-          "0x5FbDB2315678afecb367f032d93F642f64180aa3", //  copy address from deployments
+          "0x5FbDB2315678afecb367f032d93F642f64180aa3", // copy address from deployments
           admin
         );
       });
@@ -51,7 +55,7 @@ const { moveBlocks } = require("../../utils/moveBlocks");
             .connect(owner)
             .registerProperty(location, gpsAddress, ipfsHash);
         });
-        it("should not be veriied by default after registering a property", async () => {
+        it("should not be verified by default after registering a property", async () => {
           const verifiedProperty = await propertyRegistry.properties(
             gpsAddress
           );
@@ -75,11 +79,13 @@ const { moveBlocks } = require("../../utils/moveBlocks");
           expect(verifiedProperty.isVerified).to.be.true;
         });
 
-        it("should update property price only after auctionning but befoer before bidding starts by registered owner for a registered property", async () => {
-          //You need to create an auction before you can updating the price
+        it("should update property price only after auctioning but before bidding starts by registered owner for a registered property", async () => {
+          // You need to create an auction before you can update the price
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           await propertyRegistry
             .connect(owner)
             .updatePropertyPrice(gpsAddress, newPrice);
@@ -90,7 +96,9 @@ const { moveBlocks } = require("../../utils/moveBlocks");
         it("can create auction for a registered property", async () => {
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           const auctionItem = await propertyRegistry.auctions(gpsAddress);
           console.log(auctionItem);
           expect(auctionItem.isActive).to.be.true;
@@ -101,7 +109,9 @@ const { moveBlocks } = require("../../utils/moveBlocks");
 
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           await propertyRegistry
             .connect(buyer)
             .placeBid(gpsAddress, { value: ethers.parseEther("1.5") });
@@ -116,24 +126,45 @@ const { moveBlocks } = require("../../utils/moveBlocks");
         it("should not create a new auction for an already active property", async () => {
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           await expect(
             propertyRegistry
               .connect(owner)
-              .createAuction(gpsAddress, startingPrice, auctionEndTime)
+              .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+                value: listingFee,
+              })
           ).to.be.reverted;
         });
       });
 
       describe("Auction Contract", () => {
+        let userBalanceInitial;
         beforeEach(async () => {
+          userBalanceInitial = await propertyRegistry.pendingReturns(
+            user.address
+          );
+          console.log("userBalance: ", userBalanceInitial.toString());
           await propertyRegistry
             .connect(owner)
-            .registerProperty(location, gpsAddress, ipfsHash); //owner registers property
-          await propertyRegistry.connect(admin).verifyProperty(gpsAddress); //admin verifies property
+            .registerProperty(location, gpsAddress, ipfsHash); // owner registers property
+          await propertyRegistry.connect(admin).verifyProperty(gpsAddress); // admin verifies property
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime); //owner creates auction
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            }); // owner creates auction
+        });
+        it("Contract Owwer gets funds when an auction is created and when there is a winnning bid", async () => {
+          await moveTime(auctionEndTime + 1);
+          await moveBlocks(1);
+
+          const userBalance = await propertyRegistry.pendingReturns(
+            user.address
+          ); //user(contract owner) gets funds
+          console.log("userBalance: ", userBalance.toString());
+          assert(userBalance.toString() > userBalanceInitial.toString());
         });
         it("Only Owner can cancel an auction but only if there are no bids", async () => {
           await moveTime(auctionEndTime + 1);
@@ -146,7 +177,7 @@ const { moveBlocks } = require("../../utils/moveBlocks");
         it("should place a bid on an active auction", async () => {
           await propertyRegistry
             .connect(buyer)
-            .placeBid(gpsAddress, { value: bidAmount }); //buyer places bid
+            .placeBid(gpsAddress, { value: bidAmount }); // buyer places bid
           const highestBidder = await propertyRegistry.getHighestBidder(
             gpsAddress
           );
@@ -156,11 +187,11 @@ const { moveBlocks } = require("../../utils/moveBlocks");
         it("should end an active auction after auctionEndTime", async () => {
           await propertyRegistry
             .connect(buyer)
-            .placeBid(gpsAddress, { value: bidAmount }); //buyer places bid
+            .placeBid(gpsAddress, { value: bidAmount }); // buyer places bid
           // Increase time to simulate auctionEndTime
           await moveTime(auctionEndTime + 1);
           await moveBlocks(1);
-          //cannot canncel auction after bid has been placed
+          // cannot cancel auction after bid has been placed
 
           const { upkeepNeeded, performData } = await propertyRegistry
             .connect(owner)
@@ -183,26 +214,58 @@ const { moveBlocks } = require("../../utils/moveBlocks");
           expect(auctionDetails.highestBidder).to.equal(buyer.address);
         });
 
-        it("when there is a higher bid the inital bidder should be credited in the in the mapping", async () => {
-          await propertyRegistry
-            .connect(buyer)
-            .placeBid(gpsAddress, { value: bidAmount }); //buyer places bid
-          // Cancel the auction
-          await propertyRegistry
-            .connect(user)
-            .placeBid(gpsAddress, { value: ethers.parseEther("2") }); //buyer places bid
-
-          const pendingAmount = await propertyRegistry.pendingReturns(
+        it("when there is a higher bid the initial bidder should be credited in the mapping", async () => {
+          const initialBuyerBalance = await ethers.provider.getBalance(
             buyer.address
           );
-          console.log(pendingAmount);
-          expect(pendingAmount).to.equal(ethers.parseEther("1.5"));
+          console.log("initialBuyerBalance: ", initialBuyerBalance.toString());
+
+          // Buyer places initial bid
+          const buyerTx = await propertyRegistry
+            .connect(buyer)
+            .placeBid(gpsAddress, { value: bidAmount });
+          const buyerTxReceipt = await buyerTx.wait(1);
+
+          // Check buyer's pending returns should be 0 initially
+          let buyerPendingReturns = await propertyRegistry.pendingReturns(
+            buyer.address
+          );
+          expect(buyerPendingReturns).to.equal(0);
+
+          // User places a higher bid
+          const userTx = await propertyRegistry
+            .connect(user)
+            .placeBid(gpsAddress, { value: ethers.parseEther("2") });
+          const userTxReceipt = await userTx.wait(1);
+
+          // Check that buyer's pending returns is updated
+          buyerPendingReturns = await propertyRegistry.pendingReturns(
+            buyer.address
+          );
+          expect(buyerPendingReturns).to.equal(bidAmount);
+
+          // Buyer withdraws their funds
+          const withdrawTx = await propertyRegistry.connect(buyer).withdraw();
+          await withdrawTx.wait(1);
+
+          // Check that buyer's pending returns is reset to 0 after withdrawal
+          buyerPendingReturns = await propertyRegistry.pendingReturns(
+            buyer.address
+          );
+          expect(buyerPendingReturns).to.equal(0);
+
+          // Ensure buyer's balance has increased by the bid amount (minus gas costs)
+          const finalBuyerBalance = await ethers.provider.getBalance(
+            buyer.address
+          );
+          console.log("finalBuyerBalance: ", finalBuyerBalance.toString());
+          assert(finalBuyerBalance.toString() > initialBuyerBalance.toString());
         });
 
         it("should not allow placing bids after auction ends", async () => {
           await propertyRegistry
             .connect(buyer)
-            .placeBid(gpsAddress, { value: bidAmount }); //buyer places bid
+            .placeBid(gpsAddress, { value: bidAmount }); // buyer places bid
           // Increase time to simulate auctionEndTime
           await moveTime(auctionEndTime + 1);
           await moveBlocks(1);
@@ -223,7 +286,9 @@ const { moveBlocks } = require("../../utils/moveBlocks");
           await propertyRegistry.connect(admin).verifyProperty(gpsAddress);
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           await propertyRegistry
             .connect(buyer)
             .placeBid(gpsAddress, { value: bidAmount });
@@ -298,7 +363,9 @@ const { moveBlocks } = require("../../utils/moveBlocks");
           await propertyRegistry.connect(admin).verifyProperty(gpsAddress);
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           await propertyRegistry
             .connect(buyer)
             .placeBid(gpsAddress, { value: bidAmount });
@@ -330,7 +397,9 @@ const { moveBlocks } = require("../../utils/moveBlocks");
           await propertyRegistry.connect(admin).verifyProperty(gpsAddress);
           await propertyRegistry
             .connect(owner)
-            .createAuction(gpsAddress, startingPrice, auctionEndTime);
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
           const initialBalance = await ethers.provider.getBalance(
             buyer.address
           );
@@ -351,6 +420,36 @@ const { moveBlocks } = require("../../utils/moveBlocks");
             .performUpkeep(performData);
 
           await txResponse.wait(1);
+
+          await propertyRegistry.connect(buyer).withdraw();
+
+          const finalBalance = await ethers.provider.getBalance(buyer.address);
+
+          assert(finalBalance.toString() > initialBalance.toString());
+        });
+
+        it("should allow previous highest bidder to withdraw funds after being outbid", async () => {
+          await propertyRegistry
+            .connect(owner)
+            .registerProperty(location, gpsAddress, ipfsHash);
+          await propertyRegistry.connect(admin).verifyProperty(gpsAddress);
+          await propertyRegistry
+            .connect(owner)
+            .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+              value: listingFee,
+            });
+
+          await propertyRegistry
+            .connect(buyer)
+            .placeBid(gpsAddress, { value: bidAmount }); // initial highest bid
+
+          await propertyRegistry
+            .connect(user)
+            .placeBid(gpsAddress, { value: ethers.parseEther("2") }); // new higher bid
+
+          const initialBalance = await ethers.provider.getBalance(
+            buyer.address
+          );
 
           await propertyRegistry.connect(buyer).withdraw();
 

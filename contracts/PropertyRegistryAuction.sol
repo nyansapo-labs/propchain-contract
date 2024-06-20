@@ -14,6 +14,7 @@ error AUCTION__BID_ALREADY_PLACED();
 error AUCTION__NO_FUNDS_TO_WITHDRAW();
 error AUCTION__WITHDRAW_FAILED();
 error AUCTION__NO_UPKEEP_NEEDED();
+error AUCTION__INSUFFICIENT_LISTING_FEE();
 
 /// @title Auction Contract
 /// @notice This contract is used to manage property auctions and bidding of properties
@@ -30,10 +31,11 @@ contract Auction is ReentrancyGuard, AutomationCompatible {
         bool isActive;
         bool bidPlaced;
     }
-
+    uint256 public constant TRANSACTION_FEE_PERCENTAGE = 1; // Transaction fee percentage
     mapping(string => AuctionItem) public auctions;
     mapping(address => uint256) public pendingReturns;
     string[] public activeAuctionList;
+    address public contractOwner;
     mapping(string => bool) public activeAuctions; // Track all active auction addresses(property addresses)
 
     event AuctionCreated(
@@ -56,6 +58,10 @@ contract Auction is ReentrancyGuard, AutomationCompatible {
         string indexed propertyAddress,
         address indexed seller
     );
+
+    constructor(address _contractOwner) {
+        contractOwner = _contractOwner;
+    }
 
     modifier auctionExists(string memory propertyAddress) {
         if (auctions[propertyAddress].auctionEndTime == 0) {
@@ -122,10 +128,18 @@ contract Auction is ReentrancyGuard, AutomationCompatible {
         string memory propertyAddress,
         uint256 startingPrice,
         uint256 auctionEndTime
-    ) public virtual nonReentrant {
+    ) public payable virtual nonReentrant {
         if (auctions[propertyAddress].isActive) {
             revert AUCTION__AUCTION_ALREADY_EXISTS();
         }
+
+        // Require listing fee to create an auction (1% of starting price)
+        uint256 listingFee = (startingPrice * TRANSACTION_FEE_PERCENTAGE) / 100;
+        if (msg.value < listingFee) {
+            revert AUCTION__INSUFFICIENT_LISTING_FEE();
+        }
+        // Transfer listing fee to contract owner
+        pendingReturns[contractOwner] += msg.value;
 
         AuctionItem storage newAuction = auctions[propertyAddress];
         newAuction.propertyAddress = propertyAddress;
@@ -188,16 +202,17 @@ contract Auction is ReentrancyGuard, AutomationCompatible {
         _removeActiveAuction(propertyAddress);
 
         if (auction.bidPlaced) {
+            uint256 transactionFee = (auction.highestBid *
+                TRANSACTION_FEE_PERCENTAGE) / 100;
+            pendingReturns[contractOwner] += transactionFee;
+            pendingReturns[auction.highestBidder] += (auction.highestBid -
+                transactionFee);
             emit AuctionEnded(
                 propertyAddress,
                 auction.highestBidder,
                 auction.highestBid
             );
-            _afterAuctionEnd(
-                propertyAddress,
-                auction.highestBidder,
-                auction.highestBid
-            );
+            _afterAuctionEnd(propertyAddress, auction.highestBidder);
             highestBidder = auction.highestBidder;
         } else {
             emit AuctionEnded(propertyAddress, address(0), 0);
@@ -268,10 +283,8 @@ contract Auction is ReentrancyGuard, AutomationCompatible {
         }
     }
 
-    // Define this as a virtual function to be overridden in the derived contract
     function _afterAuctionEnd(
         string memory propertyAddress,
-        address highestBidder,
-        uint256 highestBid
+        address highestBidder
     ) internal virtual {}
 }

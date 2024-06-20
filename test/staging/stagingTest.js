@@ -9,6 +9,7 @@ developmentChains.includes(network.name)
         buyer,
         owner,
         admin,
+        listingFee,
         location,
         gpsAddress,
         ipfsHash,
@@ -23,16 +24,18 @@ developmentChains.includes(network.name)
         admin = accounts[0];
         owner = accounts[1];
         buyer = accounts[2];
+        listingFee = (1 / 100) * Number(startingPrice);
         location = "Test5 Location";
         gpsAddress = "1991";
         ipfsHash = "QmHashh";
         startingPrice = ethers.parseEther("0.001");
         auctionEndTime = 90; // 90 seconds from now
         bidAmount = ethers.parseEther("0.005");
+        // Listen for AuctionEnded event
 
         propertyRegistry = await ethers.getContractAt(
           "PropertyRegistry",
-          "0x47D6700AB06CC3efEE5320278DE397A8D37A3929",
+          "0xEbF68D0316F5Ca8dbeD956e4f1bF709490E53166",
           admin
         );
         console.log(
@@ -43,8 +46,8 @@ developmentChains.includes(network.name)
 
       describe("PropertyRegistry and Auction Events and Keepers", () => {
         this.timeout(200000);
+
         it("should work with live Chainlink Keepers for automation", async function () {
-          // Listen for AuctionEnded event
           await new Promise(async (resolve, reject) => {
             propertyRegistry.once(
               "AuctionEnded",
@@ -60,7 +63,7 @@ developmentChains.includes(network.name)
 
                   // Confirm transaction by buyer and seller
                   await propertyRegistry
-                    .connect(admin)
+                    .connect(buyer)
                     .confirmTransaction(gpsAddress);
                   await propertyRegistry
                     .connect(owner)
@@ -68,7 +71,7 @@ developmentChains.includes(network.name)
 
                   // Admin confirms transaction
                   await propertyRegistry
-                    .connect(buyer)
+                    .connect(admin)
                     .adminConfirmTransaction(gpsAddress, "NewDocumentHash");
 
                   // Check if transaction is completed
@@ -87,25 +90,27 @@ developmentChains.includes(network.name)
               }
             );
 
-            console.log("Registering property...");
-            const registerTx = await propertyRegistry
-              .connect(owner)
-              .registerProperty(location, gpsAddress, ipfsHash);
+            // console.log("Registering property...");
+            // const registerTx = await propertyRegistry
+            //   .connect(owner)
+            //   .registerProperty(location, gpsAddress, ipfsHash);
 
-            await registerTx.wait(1);
-            console.log("Property registered.");
+            // await registerTx.wait(1);
+            // console.log("Property registered.");
 
-            console.log("Verifying property...");
-            const verifyTx = await propertyRegistry
-              .connect(admin)
-              .verifyProperty(gpsAddress);
-            await verifyTx.wait(1);
-            console.log("Property verified.");
+            // console.log("Verifying property...");
+            // const verifyTx = await propertyRegistry
+            //   .connect(admin)
+            //   .verifyProperty(gpsAddress);
+            // await verifyTx.wait(1);
+            // console.log("Property verified.");
 
             console.log("Creating auction...");
             const createAuctionTx = await propertyRegistry
               .connect(owner)
-              .createAuction(gpsAddress, startingPrice, auctionEndTime); //owner as the seller
+              .createAuction(gpsAddress, startingPrice, auctionEndTime, {
+                value: listingFee,
+              }); //owner as the seller
             await createAuctionTx.wait(1);
             console.log("Auction created.");
 

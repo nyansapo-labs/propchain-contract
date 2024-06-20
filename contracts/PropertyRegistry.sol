@@ -77,7 +77,10 @@ contract PropertyRegistry is Ownable, Auction {
         address buyer
     );
 
-    constructor(address _owner) Ownable(_owner) {}
+    constructor(
+        address _owner,
+        address _contractOwner
+    ) Ownable(_owner) Auction(_contractOwner) {}
 
     modifier onlyAdmin() {
         if (msg.sender != owner()) {
@@ -163,6 +166,7 @@ contract PropertyRegistry is Ownable, Auction {
         uint256 _auctionEndTime
     )
         public
+        payable
         override
         onlyRegisteredProperty(_gpsAddress)
         onlyPropertyOwner(_gpsAddress)
@@ -214,10 +218,8 @@ contract PropertyRegistry is Ownable, Auction {
     // Override the _afterAuctionEnd function to call initiateTransaction
     function _afterAuctionEnd(
         string memory propertyAddress,
-        address highestBidder,
-        uint256 highestBid
+        address highestBidder
     ) internal override {
-        pendingReturns[highestBidder] += highestBid;
         initiateTransaction(propertyAddress, highestBidder);
     }
 

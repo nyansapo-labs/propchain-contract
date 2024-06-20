@@ -6,8 +6,9 @@ module.exports = async ({ deployments, network }) => {
   const { deploy, log } = deployments;
   const accounts = await ethers.getSigners();
   const deployer = accounts[0];
+  const contractOwner = accounts[1];
 
-  const argss = [deployer.address];
+  const argss = [deployer.address, contractOwner.address];
 
   const PropertyRegistry = await deploy("PropertyRegistry", {
     from: deployer.address,
