@@ -25,9 +25,9 @@ developmentChains.includes(network.name)
         owner = accounts[1];
         buyer = accounts[2];
         listingFee = (1 / 100) * Number(startingPrice);
-        location = "Test5 Location";
-        gpsAddress = "1991";
-        ipfsHash = "QmHashh";
+        location = "Test6 Location";
+        gpsAddress = "1992";
+        ipfsHash = "QmHashh1";
         startingPrice = ethers.parseEther("0.001");
         auctionEndTime = 90; // 90 seconds from now
         bidAmount = ethers.parseEther("0.005");
@@ -90,20 +90,20 @@ developmentChains.includes(network.name)
               }
             );
 
-            // console.log("Registering property...");
-            // const registerTx = await propertyRegistry
-            //   .connect(owner)
-            //   .registerProperty(location, gpsAddress, ipfsHash);
+            console.log("Registering property...");
+            const registerTx = await propertyRegistry
+              .connect(owner)
+              .registerProperty(location, gpsAddress, ipfsHash);
 
-            // await registerTx.wait(1);
-            // console.log("Property registered.");
+            await registerTx.wait(1);
+            console.log("Property registered.");
 
-            // console.log("Verifying property...");
-            // const verifyTx = await propertyRegistry
-            //   .connect(admin)
-            //   .verifyProperty(gpsAddress);
-            // await verifyTx.wait(1);
-            // console.log("Property verified.");
+            console.log("Verifying property...");
+            const verifyTx = await propertyRegistry
+              .connect(admin)
+              .verifyProperty(gpsAddress);
+            await verifyTx.wait(1);
+            console.log("Property verified.");
 
             console.log("Creating auction...");
             const createAuctionTx = await propertyRegistry
