@@ -1,6 +1,6 @@
 # PropChain
 
-# Abokobi Property Registry and Mnagement System
+# Abokobi Property Registry and Management System
 
 ## Overview
 
@@ -8,7 +8,7 @@ Welcome to the Abokobi Property Registry and Management System. This project aim
 
 ## Problem Statement
 
-After conducting extensive research in the Abokobi district, it became evident that the current methods of land management and storage rely heavily on spreadsheets and paper systems. These methods are prone to errors, inefficiencies, and lack of transparency. There is a pressing need for a reliable, secure, and transparent system to manage property registrations and ransactions.
+After conducting extensive research in the Abokobi district, it became evident that the current methods of land management and storage rely heavily on spreadsheets and paper systems. These methods are prone to errors, inefficiencies, and lack of transparency. There is a pressing need for a reliable, secure, and transparent system to manage property registrations and transactions.
 
 ## Solution
 
